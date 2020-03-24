@@ -1,0 +1,12 @@
+{
+  "mu": 0.1,
+  "sigma": 0.1,
+  "beta": 0.1,
+  "gamma": 0.1,
+  "start_S": 1000,
+  "start_E": 7,
+  "start_I": 3,
+  "start_R": 0,
+  "duration": 200,
+  "outdir": "../outputs"
+}
