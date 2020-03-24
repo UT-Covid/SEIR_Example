@@ -1,3 +1,5 @@
+*THIS BRANCH CONTAINS FEATURE UNDER DEVELOPMENT; USE WITH CAUTION*
+
 # SEIR Example
 
 **Please note all instructions are for Unix-alike systems using bash.**
