@@ -47,12 +47,13 @@ def validate_params(param_dict, float_keys, int_keys, str_keys):
 
 class SEIR:
 
-    def __init__(self, beta, mu, sigma, gamma, start_S, start_E, start_I, start_R, duration, outdir):
+    def __init__(self, beta, mu, sigma, gamma, omega, start_S, start_E, start_I, start_R, duration, outdir):
 
-        self.beta = beta
-        self.mu = mu
-        self.sigma = sigma
-        self.gamma = gamma
+        self.beta = beta  # transmission rate
+        self.mu = mu  # death rate from infection
+        self.sigma = sigma  # rate E -> I
+        self.gamma = gamma  # recovery rate
+        self.omega = omega  # waning immunity
         self.start_S = start_S
         self.start_E = start_E
         self.start_I = start_I
@@ -70,10 +71,10 @@ class SEIR:
 
         y = np.zeros(4)
 
-        y[0] = self.mu - ((self.beta * I) + self.mu) * S
-        y[1] = self.beta * S * I - (self.mu + self.sigma) * E
-        y[2] = self.sigma * E - (self.mu + self.gamma) * I
-        y[3] = self.gamma * I - self.mu * R
+        y[0] = self.mu - ((self.beta * I) + self.mu) * S + (self.omega * R)
+        y[1] = (self.beta * S * I) - (self.mu + self.sigma) * E
+        y[2] = (self.sigma * E) - (self.mu + self.gamma) * I
+        y[3] = (self.gamma * I) - (self.mu * R) - (self.omega * R)
 
         return y
 
@@ -88,7 +89,7 @@ class SEIR:
 
         time = np.arange(0, len(results[:, 1]))
 
-        plt.figure(figsize=(10,10), dpi=300)
+        plt.figure(figsize=(5,8), dpi=300)
 
         plt.plot(
             time, results[:, 0], "k",
