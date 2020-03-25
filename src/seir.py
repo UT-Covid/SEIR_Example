@@ -114,7 +114,7 @@ def main(opts):
 
     pars = acquire_params(opts.paramfile)
 
-    float_keys = ['beta_lambda', 'mu', 'sigma', 'gamma']
+    float_keys = ['beta_lambda', 'mu', 'sigma', 'gamma', 'omega']
     int_keys = ['start_S', 'start_E', 'start_I', 'start_R', 'duration', 'n_runs']
     str_keys = ['outdir']
     validate_params(pars, float_keys, int_keys, str_keys)
