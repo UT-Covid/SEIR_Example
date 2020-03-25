@@ -1,0 +1,1 @@
+If we were parameterizing the distribution from which beta values are drawn, we would save it in this directory.

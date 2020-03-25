@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.random import exponential
 import scipy
 from scipy import integrate
 import json
@@ -47,9 +48,10 @@ def validate_params(param_dict, float_keys, int_keys, str_keys):
 
 class SEIR:
 
-    def __init__(self, beta, mu, sigma, gamma, start_S, start_E, start_I, start_R, duration, outdir):
+    def __init__(self, beta_lambda, mu, sigma, gamma, start_S, start_E, start_I, start_R, duration, outdir, n_runs):
 
-        self.beta = beta
+        self.beta_lambda = beta_lambda
+        self.beta = self.draw_beta()
         self.mu = mu
         self.sigma = sigma
         self.gamma = gamma
@@ -59,7 +61,11 @@ class SEIR:
         self.start_R = start_R
         self.duration = duration
         self.outdir = outdir
+        self.n_runs = n_runs
         self.R = [self.start_S, self.start_E, self.start_I, self.start_R]
+
+    def draw_beta(self):
+        return exponential(self.beta_lambda)
 
     def seir(self, x, t):
 
@@ -84,24 +90,22 @@ class SEIR:
 
         return results
 
-    def plot_timeseries(self, results):
+def plot_timeseries(results, savedir):
 
-        time = np.arange(0, len(results[:, 1]))
+    time = np.arange(0, len(results[1]))
 
-        plt.figure(figsize=(10,10), dpi=300)
+    plt.figure(figsize=(10,10), dpi=300)
 
+    for r in results:
         plt.plot(
-            time, results[:, 0], "k",
-            time, results[:, 1], "g",
-            time, results[:, 2], "r",
-            time, results[:, 3], "b",)
-        plt.legend(("S", "E", "I", "R"), loc=0)
-        plt.ylabel("Population Size")
-        plt.xlabel("Time")
-        plt.xticks(rotation=45)
-        plt.title("SEIR Model")
-        plt.savefig(os.path.join(self.outdir, 'SEIR_Model.png'))
-        plt.show()
+            time, r[:, 2], "r"
+        )
+    plt.ylabel("Population Size")
+    plt.xlabel("Time")
+    plt.xticks(rotation=45)
+    plt.title("SEIR Model | Infection Time Series, Stochastic Beta")
+    plt.savefig(os.path.join(savedir, 'Stochastic_SEIR_Model.png'))
+    plt.show()
 
 def main(opts):
 
@@ -109,16 +113,19 @@ def main(opts):
 
     pars = acquire_params(opts.paramfile)
 
-    float_keys = ['beta', 'mu', 'sigma', 'gamma']
-    int_keys = ['start_S', 'start_E', 'start_I', 'start_R', 'duration']
+    float_keys = ['beta_lambda', 'mu', 'sigma', 'gamma']
+    int_keys = ['start_S', 'start_E', 'start_I', 'start_R', 'duration', 'n_runs']
     str_keys = ['outdir']
     validate_params(pars, float_keys, int_keys, str_keys)
 
     # ----- Run model if inputs are valid -----#
 
-    seir_model = SEIR(**pars)
-    r = seir_model.integrate()
-    seir_model.plot_timeseries(r)
+    results = []
+    for i in range(pars['n_runs']):
+        seir_model = SEIR(**pars)
+        results.append(seir_model.integrate())
+
+    plot_timeseries(results, pars['outdir'])
 
 if __name__ == '__main__':
 
