@@ -1,4 +1,4 @@
-# SEIR Example
+# Discrete Time SEIR Example
 
 **Please note all instructions are for Unix-alike systems using bash.**
 
@@ -27,4 +27,4 @@
 
 ## Citation
 
-Keeling, M.J. and Rohani, P. (2007) Modeling Infectious Diseases in Humans and Animals. Princeton University Press.
+n/a; modified from Meyers Lab code for epidemic simulation

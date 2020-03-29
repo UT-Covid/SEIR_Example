@@ -5,6 +5,7 @@ import json
 import argparse
 import matplotlib.pyplot as plt
 import os
+import datetime as dt
 
 # ----------------------------------------------------------------------------------------------
 # -- Read in parameters file
@@ -40,6 +41,13 @@ def validate_params(param_dict, float_keys, int_keys, str_keys):
         if type(param_dict[key]) != str:
             raise ValueError('Parameter {} is not specified as a string.'.format(key))
 
+# ----------------------------------------------------------------------------------------------
+# -- static methods
+# ----------------------------------------------------------------------------------------------
+
+def deterministic_pars(param):
+
+    return param
 
 # ----------------------------------------------------------------------------------------------
 # -- define the system of differential equations
@@ -47,55 +55,84 @@ def validate_params(param_dict, float_keys, int_keys, str_keys):
 
 class SEIR:
 
-    def __init__(self, beta, mu, sigma, gamma, omega, start_S, start_E, start_I, start_R, duration, outdir):
+    def __init__(self, days, beta, mu, sigma, gamma, omega, start_S, start_E, start_I, start_R, outdir):
 
+        self.days = days
+        self.interval_per_day = 10
+        self.duration = self.days * self.interval_per_day  # number of discrete time steps with 10 time steps per day
         self.beta = beta  # transmission rate
-        self.mu = mu  # death rate from infection
-        self.sigma = sigma  # rate E -> I
-        self.gamma = gamma  # recovery rate
-        self.omega = omega  # waning immunity
+        self.mu = mu / self.interval_per_day  # death rate from infection
+        self.sigma = sigma / self.interval_per_day  # rate E -> I
+        self.gamma = gamma / self.interval_per_day  # recovery rate
+        self.omega = omega  # relative infectiousness
+        self.phi = 1  # contact matrix for school; set aside now
         self.start_S = start_S
         self.start_E = start_E
         self.start_I = start_I
         self.start_R = start_R
-        self.duration = duration
         self.outdir = outdir
-        self.R = [self.start_S, self.start_E, self.start_I, self.start_R]
+        self.Sus = [self.start_S]  # speed up code by setting array size at the beginning
+        self.Exp = [self.start_E]
+        self.Inf = [self.start_I]
+        self.Rec = [self.start_R]
+        self.N = [self.Sus[0] + self.Exp[0] + self.Inf[0] + self.Rec[0]]
+        self.stochastic = False
+        self.force_inf = 0
+        self.rate_s2e = 0  # force of infection
+        self.distr_function = deterministic_pars
+        if self.stochastic:
+            self.distr_function = np.random.poisson
 
-    def seir(self, x, t):
+    def N_t(self, t):
 
-        S = x[0]
-        E = x[1]
-        I = x[2]
-        R = x[3]
+        self.N.append(self.Sus[t] + self.Exp[t] + self.Inf[t] + self.Rec[t])
 
-        y = np.zeros(4)
+    def calc_force_infection(self, t):
 
-        y[0] = self.mu - ((self.beta * I) + self.mu) * S + (self.omega * R)
-        y[1] = (self.beta * S * I) - (self.mu + self.sigma) * E
-        y[2] = (self.sigma * E) - (self.mu + self.gamma) * I
-        y[3] = (self.gamma * I) - (self.mu * R) - (self.omega * R)
+        self.force_inf += ((self.beta * self.phi * self.omega * self.Sus[t-1] * self.Inf[t-1]) / self.N[t-1])
+        return self.distr_function(self.force_inf)
 
-        return y
+    def calc_exp_to_inf(self, t):
 
-    def integrate(self):
+        return self.distr_function(self.sigma * self.Exp[t-1])
 
-        time = np.arange(0, self.duration, 0.01)
-        results = scipy.integrate.odeint(self.seir, self.R, time)
+    def calc_inf_to_rec(self, t):
 
-        return results
+        return self.distr_function(self.gamma * self.Inf[t-1])
 
-    def plot_timeseries(self, results):
+    def seir(self):
 
-        time = np.arange(0, len(results[:, 1]))
+        for t in range(1, self.duration):
 
-        plt.figure(figsize=(5,8), dpi=300)
+            ## set rates
+            rate_s2e = self.calc_force_infection(t)
+            rate_e2i = self.calc_exp_to_inf(t)
+            rate_i2r = self.calc_inf_to_rec(t)
+
+            self.Sus.append(max(0, self.Sus[t-1] - rate_s2e))
+            if not self.Sus[t] > 0:
+                rate_s2e = self.Sus[t-1]
+            self.Exp.append(max(0, self.Exp[t-1] + rate_s2e - rate_e2i))
+            if not self.Exp[t] > 0:
+                rate_e2i = self.Exp[t-1] + rate_s2e
+            self.Inf.append(max(0, self.Inf[t-1] + rate_e2i - rate_i2r))
+            if not self.Inf[t] > 0:
+                rate_i2r = self.Inf[t-1] + rate_e2i
+            self.Rec.append(max(0, self.Rec[t-1] + rate_i2r))
+
+            self.N_t(t)  # update population totals
+
+    def plot_timeseries(self):
+
+        time = np.arange(0, self.duration)
+
+        plt.figure(figsize=(5, 8), dpi=300)
 
         plt.plot(
-            time, results[:, 0], "k",
-            time, results[:, 1], "g",
-            time, results[:, 2], "r",
-            time, results[:, 3], "b",)
+            time, self.Sus, "k",
+            time, self.Exp, "g",
+            time, self.Inf, "r",
+            time, self.Rec, "b",)
         plt.legend(("S", "E", "I", "R"), loc=0)
         plt.ylabel("Population Size")
         plt.xlabel("Time")
@@ -111,15 +148,15 @@ def main(opts):
     pars = acquire_params(opts.paramfile)
 
     float_keys = ['beta', 'mu', 'sigma', 'gamma', 'omega']
-    int_keys = ['start_S', 'start_E', 'start_I', 'start_R', 'duration']
+    int_keys = ['start_S', 'start_E', 'start_I', 'start_R', 'days']
     str_keys = ['outdir']
     validate_params(pars, float_keys, int_keys, str_keys)
 
     # ----- Run model if inputs are valid -----#
 
     seir_model = SEIR(**pars)
-    r = seir_model.integrate()
-    seir_model.plot_timeseries(r)
+    seir_model.seir()
+    seir_model.plot_timeseries()
 
 if __name__ == '__main__':
 
