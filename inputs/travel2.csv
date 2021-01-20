@@ -1,0 +1,13 @@
+﻿source,destination,destination_type,age_src,age_dest,n
+A,A,local,young,young,0
+A,A,local,old,old,0
+A,school,contextual,young,young,25
+A,school,contextual,old,old,0
+B,B,local,young,young,0
+B,B,local,old,old,0
+B,school,contextual,young,young,50
+B,school,contextual,old,old,0
+A,B,local,young,young,0
+A,B,local,old,old,0
+B,A,local,young,young,0
+B,A,local,old,old,0
