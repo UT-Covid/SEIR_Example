@@ -18,6 +18,17 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 
+# breaks single defintion rule -- also present in seir.py
+def discrete_time_approx(rate, timestep):
+    """
+
+    :param rate: daily rate
+    :param timestep: timesteps per day
+    :return: rate rescaled by time step
+    """
+
+    return (1 - (1 - rate)**(1/timestep))
+
 def load_travel(path):
     """
     Load the number of people traveling between nodes (both implicit and explicit)
@@ -42,138 +53,135 @@ def load_population(path):
     population = pd.read_csv(path, header=0)
     return population
 
-def implied_contacts(travel_contact_df):
+def contact_probability(n_i, n_j, n_i_total, n_k_total):
 
-    travel_contact_df['expected_daily_contacts'] = travel_contact_df['n_travel'] * travel_contact_df['daily_per_capita_contacts']
-    total_by_node = travel_contact_df.groupby(['destination'])['expected_daily_contacts'].sum().reset_index()
+    # contacts between members of source node within the destination node
+    fraction_i_to_j = n_i/n_i_total
+    fraction_j_in_k = n_j/n_k_total
+    pr_ii_in_j = fraction_i_to_j * fraction_j_in_k
 
-    source_nodes = travel_contact_df.groupby(['destination'])['source'].nunique().reset_index()
-    source_nodes.columns = ['destination', 'number_source_nodes']
+    return pr_ii_in_j
 
-    travel_contact_df = pd.merge(travel_contact_df, total_by_node, on='destination', suffixes=['', '_destination_total'])
-    travel_contact_df = pd.merge(travel_contact_df, source_nodes, on='destination')
-    travel_contact_df['fraction_total_contacts'] = travel_contact_df['expected_daily_contacts'] / travel_contact_df['expected_daily_contacts_destination_total']
+def probabilistic_partition(travel_df, daily_timesteps):
 
-    # partition within node and between node contacts in the implied node
-    travel_contact_df['implied_total_contacts_within'] = (travel_contact_df['fraction_total_contacts'] * travel_contact_df['expected_daily_contacts']) / travel_contact_df[
-        'number_source_nodes']
-    travel_contact_df['implied_total_contacts_between'] = ((1 - travel_contact_df['fraction_total_contacts']) * travel_contact_df['expected_daily_contacts']) / travel_contact_df[
-        'number_source_nodes']
+    total_pop = travel_df.groupby(['source'])['n'].sum().to_dict()
+    total_contextual_dest = travel_df[travel_df['destination_type'] == 'contextual'].groupby(['destination'])['n'].sum().to_dict()
 
-    # convert total contacts to per capita contacts
-    travel_contact_df['implied_per_capita_contacts_within'] = travel_contact_df['implied_total_contacts_within'] / travel_contact_df['n_travel']
-    travel_contact_df['implied_per_capita_contacts_between'] = travel_contact_df['implied_total_contacts_between'] / travel_contact_df['n_travel']
+    if len(set(total_pop.keys()).intersection(set(total_contextual_dest.keys()))) > 0:
+        raise ValueError('Contextual nodes cannot also be source nodes.')
+    if len(set(total_contextual_dest.keys()).intersection(set(total_pop.keys()))) > 0:
+        raise ValueError('Contextual nodes cannot also be source nodes.')
 
-    # extract mappings between implicit nodes and their explicit source nodes
-    implicit_dest = travel_contact_df[travel_contact_df['dest_type'] == 'implicit']
+    total_pop.update(total_contextual_dest)
 
-    implicit2source = {}
-    for i in implicit_dest['destination'].unique():
-        srcs = implicit_dest[implicit_dest['destination'] == i]
-        implicit2source[i] = srcs['source'].unique()
+    mapping = travel_df.groupby(['destination']).aggregate(lambda tdf: tdf.unique().tolist()).reset_index()
+    mapping['source'] = [set(i) for i in mapping['source']]
+    mapping['destination_type'] = [i[0] if len(i) == 1 else i for i in mapping['destination_type']]
+    implicit2source = mapping[mapping['destination_type'] == 'contextual'][['source', 'destination']].set_index('destination').to_dict(orient='index')
 
-    source2implicit = {}
-    for i in implicit_dest['source'].unique():
-        dests = implicit_dest[implicit_dest['source'] == i]
-        source2implicit[i] = dests['destination'].unique()
-
-    # brittle: cannot support contact stratifications other than age...
-    finalized_contacts = {
-        'source': [],
-        'destination': [],
-        'age1': [],
-        'age2': [],
-        'final_daily_per_capita_contact': []
+    contact_dict = {
+        'i': [],
+        'j': [],
+        'age_i': [],
+        'age_j': [],
+        'pr_contact_ij': []
     }
 
-    # reframe the explicit -> implict contact as a combination of explicit -> explicit contacts
-    for src, impl_nodes in source2implicit.items():
-        # for each implicit node destination of a single explicit node
-        for impl in impl_nodes:
-            # get the _other_ explicit nodes that feed into the same implicit node
-            other_src = [i for i in implicit2source[impl] if i != src]
-            # get subset of edge list for all pairs of explict source and implied destination
-            btw_contact = travel_contact_df[(travel_contact_df['source'] == src) & (travel_contact_df['destination'] == impl)]
-            for i, row in btw_contact.iterrows():  # for multiple age strata in the nodes...
-                # handle the within-node contacts (src->src) that happen in the implied node
-                finalized_contacts['source'].append(src)
-                finalized_contacts['destination'].append('{}_{}'.format(impl, src))
-                finalized_contacts['age1'].append(row['age1'])
-                finalized_contacts['age2'].append(row['age2'])
-                # this is the crucial part: divide the between node contacts in the implict node by the number of
-                # other explicit source nodes that contribute to that implicit node
-                finalized_contacts['final_daily_per_capita_contact'].append(row['implied_per_capita_contacts_within'])
-                for j in other_src:
-                    finalized_contacts['source'].append(src)
-                    finalized_contacts['destination'].append('{}_{}'.format(impl, j))
-                    finalized_contacts['age1'].append(row['age1'])
-                    finalized_contacts['age2'].append(row['age2'])
-                    finalized_contacts['final_daily_per_capita_contact'].append(row['implied_per_capita_contacts_between'])
+    # if it's local contact, or contact in contextual location within local pop only, it's straightforward
+    for i, row in travel_df.iterrows():
+        if row['destination_type'] == 'local':
+            contact_dict['i'].append(row['source'])
+            contact_dict['j'].append(row['destination'])
+            contact_dict['age_i'].append(row['age_src'])
+            contact_dict['age_j'].append(row['age_dest'])
+            # if it's local within-node contact, the pr(contact) = n stay in node / n total in node (no need to multiply by another fraction)
+            if row['source'] == row['destination']:
+                daily_pr = contact_probability(n_i=row['n'], n_j=1, n_i_total=total_pop[row['source']], n_k_total=1)
+                contact_dict['pr_contact_ij'].append(daily_pr)
+            else:
+                daily_pr = contact_probability(n_i=row['n'], n_j=row['n'], n_i_total=total_pop[row['source']], n_k_total=total_pop[row['destination']])
+                contact_dict['pr_contact_ij'].append(daily_pr)
 
-    return finalized_contacts
+        # partitioning contacts between two different nodes within a contextual node requires a bit more parsing
+        elif row['destination_type'] == 'contextual':
+            other_sources = implicit2source[row['destination']]['source']
+            for j in other_sources:
+                contact_dict['i'].append(row['source'])
+                contact_dict['j'].append(j)
+                contact_dict['age_i'].append(row['age_src'])
+                contact_dict['age_j'].append(row['age_dest'])
+                j_to_dest = travel_df[(travel_df['source'] == j) \
+                                      & (travel_df['destination'] == row['destination']) \
+                                      & (travel_df['age_src'] == row['age_src']) \
+                                      & (travel_df['age_dest'] == row['age_dest'])]['n'].item()
+                daily_pr = contact_probability(n_i=row['n'], n_j=j_to_dest, n_i_total=total_pop[row['source']], n_k_total=total_pop[row['destination']])
+                contact_dict['pr_contact_ij'].append(daily_pr)
 
-def contact_df_to_arr(cdf):
+    contact_df = pd.DataFrame.from_dict(contact_dict)
+    contact_df = contact_df.groupby(['i', 'j', 'age_i', 'age_j'])['pr_contact_ij'].sum().reset_index()
 
-    sources = cdf['source'].unique()
-    destinations = cdf['destination'].unique()
+    return contact_df
 
-    # put named nodes in alphabetical order
-    all_nodes = np.concatenate((sources, destinations)).sort()
+def partition_contacts(travel, contacts, daily_timesteps):
 
-    all_ages = ['age1', 'age2']  # 2 age groups, might as well hard-code it...
+    tr_partitions = probabilistic_partition(travel, daily_timesteps)
 
-    contact_array = np.zeros([len(all_nodes), len(all_nodes), len(all_ages), len(all_ages)])
+    tc = pd.merge(tr_partitions, contacts, how='outer', left_on=['age_i', 'age_j'], right_on=['age1', 'age2'])
+    tc['interval_per_capita_contacts'] = tc['daily_per_capita_contacts'] / daily_timesteps
+    tc['partitioned_per_capita_contacts'] = tc['pr_contact_ij'] * tc['interval_per_capita_contacts']
 
-    for i, n1 in enumerate(all_nodes):
-        for j, n2 in enumerate(all_nodes):
-            for k, a1 in enumerate (all_ages):
-                for l, a2 in enumerate(all_ages):
-                    contact_val = cdf[(cdf['source'] == n1) & (cdf['destination'] == n2) & (cdf['age1'] == a1) & (cdf['age2'] == a2)]['final_daily_per_capita_contact']
-                    contact_array[i, j, k, l] = contact_val
+    recalc = tc.groupby(['age_i', 'age_j'])['partitioned_per_capita_contacts'].sum().reset_index()
+    recalc = pd.merge(recalc, contacts, how='outer', left_on=['age_i', 'age_j'], right_on=['age1', 'age2']).dropna()
+    # this check is broken
+    for i, row in recalc.iterrows():
+        try:
+            assert row['partitioned_per_capita_contacts'] == row['daily_per_capita_contacts']
+        except AssertionError:
+            print('mismatched partitioned and baseline contacts')
+            print(row)
+    tc = tc.dropna()
 
-    return contact_array
+    tc_final = tc[['i', 'j', 'age_i', 'age_j', 'partitioned_per_capita_contacts']]
 
-def pop_df_to_arr(pop_df):
+    return tc_final
 
-    pop_totals = pop_df.groupby(['source', 'age'])['n_travel'].sum().reset_index()
-    nodes = pop_totals['source'].unique().sort()
-    all_ages = ['age1', 'age2'] # again, hard-coding for simplicity's sake
+def contact_matrix(contact_df):
 
-    initial_pop_array = np.zeros([len(nodes)])
+    sources = contact_df['i'].unique()
+    destinations = contact_df['j'].unique()
+    nodes = []
+    for i in sources:
+        nodes.append(i)
+    for j in destinations:
+        nodes.append(j)
+    nodes = sorted(list(set(nodes)))
 
-    for n in nodes:
-        for a in all_ages:
-            pass
+    ages = ['young', 'old']
 
+    new_arr = np.zeros([len(nodes), len(nodes), len(ages), len(ages)])
+
+    for i, n1 in enumerate(nodes):
+        for j, n2 in enumerate(nodes):
+            for k, a1 in enumerate(ages):
+                for l, a2 in enumerate(ages):
+                    subset = contact_df[(contact_df['i'] == n1) \
+                        & (contact_df['j'] == n2) \
+                        & (contact_df['age_i'] == a1) \
+                        & (contact_df['age_j'] == a2)]
+                    if subset.empty:
+                        val = 0
+                    else:
+                        val = subset['partitioned_per_capita_contacts'].item()
+                    new_arr[i, j, k, l] = val
+
+    return new_arr
 
 def main():
 
-    tr = load_travel('../inputs/travel.csv')
-    co = load_contact('../inputs/contact.csv')
-    pop = load_population('../inputs/all_node_population.csv')
-
-    tc = pd.merge(tr, co, how='outer', left_on='age', right_on='age1')
-
-    implied_travel = tc[(tc['source_type'] == 'explicit') & (tc['dest_type'] == 'implicit')]
-
-    implied_contacts_ = implied_contacts(travel_contact_df=implied_travel)
-
-    # now add the regular old explicit -> explicit contact to the final contacts dictionary
-    expl_contact = tc[(tc['source_type'] == 'explicit') & (tc['dest_type'] == 'explicit')]
-    for i, row in expl_contact.iterrows():
-        implied_contacts_['source'].append(row['source'])
-        implied_contacts_['destination'].append(row['destination'])
-        implied_contacts_['age1'].append(row['age1'])
-        implied_contacts_['age2'].append(row['age2'])
-        implied_contacts_['final_daily_per_capita_contact'].append(row['daily_per_capita_contacts'])
-
-    contact_df = pd.DataFrame.from_dict(implied_contacts_)
-    #final_contact_df = contact_df.groupby(['source', 'destination', 'age1', 'age2'])['final_daily_per_capita_contact'].sum().reset_index()
-    final_contact_arr = contact_df_to_arr(contact_df)
-    final_pop_arr = pop_df_to_arr(tr)
-
-    return final_contact_arr, final_pop_arr
-
+    travel = load_travel('../inputs/travel3.csv')
+    contacts = load_contact('../inputs/contact.csv')
+    partition_df = partition_contacts(travel, contacts, daily_timesteps=10)
+    partition_array = contact_matrix(partition_df)
 
 if __name__ == '__main__':
 
