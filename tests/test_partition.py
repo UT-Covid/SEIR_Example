@@ -160,8 +160,7 @@ def min_cr(polymod):
 
 
 @pytest.fixture
-def max_test(max_cr, contact, travel, params_template):
-    max_contact = update_contact_rate(contact, max_cr)
+def max_test(max_contact, travel, params_template):
     max_partition = partition_contacts(travel, max_contact, daily_timesteps=10)
     max_phi_matrix = contact_matrix(max_partition)
 
@@ -184,6 +183,11 @@ def max_ref(max_cr, ref_params):
 @pytest.fixture
 def min_contact(contact, min_cr):
     return update_contact_rate(contact, min_cr)
+
+
+@pytest.fixture
+def max_contact(contact, max_cr):
+    return update_contact_rate(contact, max_cr)
 
 
 @pytest.fixture
@@ -255,12 +259,29 @@ def ref3_min(min_cr, ref3):
     return ref3_min_params
 
 
+@pytest.fixture
+def test3_max(test3, travel3, max_contact):
+    partition3_max = partition_contacts(travel3, max_contact, daily_timesteps=10)
+    phi_matrix3_max = contact_matrix(partition3_max)
+    test3_max_params = deepcopy(test3)
+    test3_max_params['phi'] = phi_matrix3_max
+    return test3_max_params
+
+
+@pytest.fixture
+def ref3_max(ref3, max_cr):
+    ref3_max_params = deepcopy(ref3)
+    ref3_max_params['phi'] = [[[[max_cr/10, 0], [0, 0]]]]
+    return ref3_max_params
+
+
 @pytest.fixture(params=[
     ('test1', 'ref_params'),
     ('max_test', 'max_ref'),
     ('min_test', 'ref_min'),
     ('test3', 'ref3'),
     ('test3_min', 'ref3_min'),
+    ('test3_max', 'ref3_max'),
 ])
 def comparison(request):
     """A workaround alternative to passing fixtures in pytest.mark.parametrize"""
@@ -472,126 +493,104 @@ def plot_local_3v2():
     test3_model.plot_timeseries()
 
 
-# test3_min vs ref3_min
-# s3_diff_min, e3_diff_min, i3_diff_min, r3_diff_min = test_partition(test3_min_model, ref3_min_model, atol=abs_tol, rtol=rel_tol)
+def plt_test3_min_vs_ref3_min():
+    # plot
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    s3_diff_min.plot(ax=ax, color='b')
+    e3_diff_min.plot(ax=ax, color='g')
+    i3_diff_min.plot(ax=ax, color='r')
+    r3_diff_min.plot(ax=ax, color='k')
+    plt.legend(("S", "E", "I", "R"), loc=0)
+    plt.ylabel("N Partition - N Baseline")
+    plt.xlabel("Time")
+    plt.xticks(rotation=45)
+    plt.title("Three Local, One Contextual vs Baseline Mixing = 0.2 contacts/person/day")
+    plt.tight_layout()
+    plt.axhline(y=0, c='gray', ls='dotted')
+    #ax.set_ylim(-2, 3)
+    # plt.show()
 
-#
-# # plot
-# fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-# s3_diff_min.plot(ax=ax, color='b')
-# e3_diff_min.plot(ax=ax, color='g')
-# i3_diff_min.plot(ax=ax, color='r')
-# r3_diff_min.plot(ax=ax, color='k')
-# plt.legend(("S", "E", "I", "R"), loc=0)
-# plt.ylabel("N Partition - N Baseline")
-# plt.xlabel("Time")
-# plt.xticks(rotation=45)
-# plt.title("Three Local, One Contextual vs Baseline Mixing = 0.2 contacts/person/day")
-# plt.tight_layout()
-# plt.axhline(y=0, c='gray', ls='dotted')
-# #ax.set_ylim(-2, 3)
-# # plt.show()
-#
-#
-# partition3_max = partition_contacts(travel3, max_contact, daily_timesteps=10)
-# phi_matrix3_max = contact_matrix(partition3_max)
-#
-# test3_max = deepcopy(test3)
-# test3_max['phi'] = phi_matrix3_max
-#
-# ref3_max = deepcopy(ref3)
-# ref3_max['phi'] = [[[[max_cr/10, 0], [0, 0]]]]
-#
-# test3_max_model = SEIR(test3_max)
-# test3_max_model.seir()
-#
-# ref3_max_model = SEIR(ref3_max)
-# ref3_max_model.seir()
-#
-#
-# # test
-# s3_diff_max, e3_diff_max, i3_diff_max, r3_diff_max = test_partition(test3_max_model, ref3_max_model, atol=abs_tol, rtol=rel_tol)
-#
-# # plot
-# fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-# s3_diff_max.plot(ax=ax, color='b')
-# e3_diff_max.plot(ax=ax, color='g')
-# i3_diff_max.plot(ax=ax, color='r')
-# r3_diff_max.plot(ax=ax, color='k')
-# plt.legend(("S", "E", "I", "R"), loc=0)
-# plt.xlabel("Time")
-# plt.xticks(rotation=45)
-# plt.title("Three Local, One Contextual vs Baseline Mixing = 10.2 contacts/person/day")
-# plt.tight_layout()
-# plt.ylabel("N Partition - N Baseline")
-# plt.axhline(y=0, c='gray', ls='dotted')
-# #ax.set_ylim(-2, 3)
-# # plt.show()
-#
-#
-#
-# def sixteen_nodes():
-#     raise NotImplementedError()
-#     # # 16 Nodes
-#
-#     travel16 = pd.read_csv('inputs/travel16.csv')
-#     partition16 = partition_contacts(travel16, contact, daily_timesteps=10)
-#     phi_matrix16 = contact_matrix(partition16)
-#     pop_s16, pop_e16, pop_i16, pop_r16 = update_start_pop(travel16)
-#
-#     test16 = deepcopy(params_template)
-#     test16['phi'] = phi_matrix16
-#     test16['start_S'] = pop_s16
-#     test16['start_E'] = pop_e16
-#     test16['start_I'] = pop_i16
-#     test16['start_R'] = pop_r16
-#     test16['n_nodes'] = 16
-#
-#     ref16 = deepcopy(params_template)
-#     ref16['phi'] = [[[[5/10, 0], [0, 0]]]]
-#     ref16_s = np.array([sorted(travel16.groupby(['age_src'])['n'].sum(), reverse=True)])
-#     ref16['start_S'] = ref16_s[0, 0] - 16
-#     ref16['start_E'] = np.array([[0, 0]])
-#     ref16['start_I'] = np.array([[16, 0]])
-#     ref16['start_R'] = np.array([[0, 0]])
-#     ref16['n_nodes'] = 1
-#
-#     test16_model = SEIR(test16)
-#     test16_model.seir()
-#
-#     ref16_model = SEIR(ref16)
-#     ref16_model.seir()
-#
-#
-#     # In[130]:
-#
-#
-#     ref16_s
-#
-#
-#     # In[131]:
-#
-#
-#     s16_diff_max, e16_diff_max, i16_diff_max, r16_diff_max = test_partition(test16_model, ref16_model, atol=abs_tol, rtol=rel_tol)
-#
-#
-#     # In[132]:
-#
-#
-#     fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-#
-#     s16_diff_max.plot(ax=ax, color='b')
-#     e16_diff_max.plot(ax=ax, color='g')
-#     i16_diff_max.plot(ax=ax, color='r')
-#     r16_diff_max.plot(ax=ax, color='k')
-#
-#     plt.legend(("S", "E", "I", "R"), loc=0)
-#     plt.xlabel("Time")
-#     plt.xticks(rotation=45)
-#     plt.title("16 Local, One Contextual vs Baseline Mixing = 5 contacts/person/day")
-#     plt.tight_layout()
-#     plt.ylabel("N Partition - N Baseline")
-#     plt.axhline(y=0, c='gray', ls='dotted')
-#     #ax.set_ylim(-2, 3)
-#
-#     plt.show()
+# plot
+def plt_test3_max_vs_ref3_max():
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    s3_diff_max.plot(ax=ax, color='b')
+    e3_diff_max.plot(ax=ax, color='g')
+    i3_diff_max.plot(ax=ax, color='r')
+    r3_diff_max.plot(ax=ax, color='k')
+    plt.legend(("S", "E", "I", "R"), loc=0)
+    plt.xlabel("Time")
+    plt.xticks(rotation=45)
+    plt.title("Three Local, One Contextual vs Baseline Mixing = 10.2 contacts/person/day")
+    plt.tight_layout()
+    plt.ylabel("N Partition - N Baseline")
+    plt.axhline(y=0, c='gray', ls='dotted')
+    #ax.set_ylim(-2, 3)
+    # plt.show()
+
+
+
+def sixteen_nodes():
+    raise NotImplementedError()
+    # # 16 Nodes
+
+    travel16 = pd.read_csv('inputs/travel16.csv')
+    partition16 = partition_contacts(travel16, contact, daily_timesteps=10)
+    phi_matrix16 = contact_matrix(partition16)
+    pop_s16, pop_e16, pop_i16, pop_r16 = update_start_pop(travel16)
+
+    test16 = deepcopy(params_template)
+    test16['phi'] = phi_matrix16
+    test16['start_S'] = pop_s16
+    test16['start_E'] = pop_e16
+    test16['start_I'] = pop_i16
+    test16['start_R'] = pop_r16
+    test16['n_nodes'] = 16
+
+    ref16 = deepcopy(params_template)
+    ref16['phi'] = [[[[5/10, 0], [0, 0]]]]
+    ref16_s = np.array([sorted(travel16.groupby(['age_src'])['n'].sum(), reverse=True)])
+    ref16['start_S'] = ref16_s[0, 0] - 16
+    ref16['start_E'] = np.array([[0, 0]])
+    ref16['start_I'] = np.array([[16, 0]])
+    ref16['start_R'] = np.array([[0, 0]])
+    ref16['n_nodes'] = 1
+
+    test16_model = SEIR(test16)
+    test16_model.seir()
+
+    ref16_model = SEIR(ref16)
+    ref16_model.seir()
+
+
+    # In[130]:
+
+
+    ref16_s
+
+
+    # In[131]:
+
+
+    s16_diff_max, e16_diff_max, i16_diff_max, r16_diff_max = test_partition(test16_model, ref16_model, atol=abs_tol, rtol=rel_tol)
+
+
+    # In[132]:
+
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+
+    s16_diff_max.plot(ax=ax, color='b')
+    e16_diff_max.plot(ax=ax, color='g')
+    i16_diff_max.plot(ax=ax, color='r')
+    r16_diff_max.plot(ax=ax, color='k')
+
+    plt.legend(("S", "E", "I", "R"), loc=0)
+    plt.xlabel("Time")
+    plt.xticks(rotation=45)
+    plt.title("16 Local, One Contextual vs Baseline Mixing = 5 contacts/person/day")
+    plt.tight_layout()
+    plt.ylabel("N Partition - N Baseline")
+    plt.axhline(y=0, c='gray', ls='dotted')
+    #ax.set_ylim(-2, 3)
+
+    plt.show()
