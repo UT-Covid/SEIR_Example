@@ -198,21 +198,57 @@ def ref_min(min_cr, ref_params):
     return d
 
 
+@pytest.fixture
+def travel3():
+    """# # Sensitivity analysis: additional nodes"""
+    return pd.read_csv('inputs/travel3.csv')
+
+
+@pytest.fixture
+def test3(travel, travel3, params_template, contact):
+    new_travel = update_travel(travel, 50, source='A', destination='A')
+    pop_s, pop_e, pop_i, pop_r = update_start_pop(new_travel)
+
+    partition3 = partition_contacts(travel3, contact, daily_timesteps=10)
+    phi_matrix3 = contact_matrix(partition3)
+    pop_s, pop_e, pop_i, pop_r = update_start_pop(travel3)
+    test3_params = deepcopy(params_template)
+    test3_params['phi'] = phi_matrix3
+    test3_params['start_S'] = pop_s
+    test3_params['start_E'] = pop_e
+    test3_params['start_I'] = pop_i
+    test3_params['start_R'] = pop_r
+    test3_params['n_nodes'] = 3
+    return test3_params
+
+
+@pytest.fixture
+def ref3(params_template, travel3):
+    ref3_params = deepcopy(params_template)
+    ref3_params['phi'] = [[[[5/10, 0], [0, 0]]]]
+    ref3_params_s = np.array([sorted(travel3.groupby(['age_src'])['n'].sum(), reverse=True)])
+    ref3_params['start_S'] = ref3_params_s[0, 0] - 3
+    ref3_params['start_E'] = np.array([[0, 0]])
+    ref3_params['start_I'] = np.array([[3, 0]])
+    ref3_params['start_R'] = np.array([[0, 0]])
+    ref3_params['n_nodes'] = 1
+    return ref3_params
+
+
 @pytest.fixture(params=[
     ('test1', 'ref_params'),
     ('max_test', 'max_ref'),
     ('min_test', 'ref_min'),
+    ('test3', 'ref3'),
 ])
 def comparison(request):
     """A workaround alternative to passing fixtures in pytest.mark.parametrize"""
     return [request.getfixturevalue(f) for f in request.param]
 
-# @pytest.mark.parametrize('test_fixture, ref_fixture', (
-#     (test1, ref_params),
-#     (max_test, max_ref),
-#     (min_test, ref_min),
-# ))
+
+# the only actual test function in this module
 def test_partition(comparison, atol, rtol):
+    # comparison is a tuple of resolved fixture values. expand it
     test, ref = comparison
     kwargs = dict(atol=atol, rtol=rtol)
 
@@ -367,60 +403,28 @@ def pop_template():
       "interval_per_day": 10
     }
 
-# new_travel = update_travel(travel, 50, source='A', destination='A')
-# pop_s, pop_e, pop_i, pop_r = update_start_pop(new_travel)
-#
-# # # Sensitivity analysis: additional nodes
-# travel3 = pd.read_csv('inputs/travel3.csv')
-#
-# partition3 = partition_contacts(travel3, contact, daily_timesteps=10)
-# phi_matrix3 = contact_matrix(partition3)
-# pop_s, pop_e, pop_i, pop_r = update_start_pop(travel3)
-# test3 = deepcopy(params_template)
-# test3['phi'] = phi_matrix3
-# test3['start_S'] = pop_s
-# test3['start_E'] = pop_e
-# test3['start_I'] = pop_i
-# test3['start_R'] = pop_r
-# test3['n_nodes'] = 3
-#
-# test3_model = SEIR(test3)
-# test3_model.seir()
-#
-# ref3 = deepcopy(params_template)
-# ref3['phi'] = [[[[5/10, 0], [0, 0]]]]
-# ref3_s = np.array([sorted(travel3.groupby(['age_src'])['n'].sum(), reverse=True)])
-# ref3['start_S'] = ref3_s[0, 0] - 3
-# ref3['start_E'] = np.array([[0, 0]])
-# ref3['start_I'] = np.array([[3, 0]])
-# ref3['start_R'] = np.array([[0, 0]])
-# ref3['n_nodes'] = 1
-#
-#
-# ref3_model = SEIR(ref3)
-# ref3_model.seir()
-#
-# # 4
+# test model 3
 # s3_diff, e3_diff, i3_diff, r3_diff = test_partition(test3_model, ref3_model, atol=abs_tol, rtol=rel_tol)
-#
-# # plot
-# test3_model.plot_timeseries()
-# ref3_model.plot_timeseries()
-# fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-# s3_diff.plot(ax=ax, color='b')
-# e3_diff.plot(ax=ax, color='g')
-# i3_diff.plot(ax=ax, color='r')
-# r3_diff.plot(ax=ax, color='k')
-# plt.legend(("S", "E", "I", "R"), loc=0)
-# plt.ylabel("N Partition - N Baseline")
-# plt.xlabel("Time")
-# plt.xticks(rotation=45)
-# plt.title("Three Local, One Contextual vs Baseline Mixing = 5 contacts/person/day")
-# plt.tight_layout()
-# #ax.set_ylim(-2, 3)
-# plt.axhline(y=0, c='gray', ls='dotted')
-# # plt.show()
-#
+
+# plot
+def plt_test3_vs_ref3():
+    test3_model.plot_timeseries()
+    ref3_model.plot_timeseries()
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    s3_diff.plot(ax=ax, color='b')
+    e3_diff.plot(ax=ax, color='g')
+    i3_diff.plot(ax=ax, color='r')
+    r3_diff.plot(ax=ax, color='k')
+    plt.legend(("S", "E", "I", "R"), loc=0)
+    plt.ylabel("N Partition - N Baseline")
+    plt.xlabel("Time")
+    plt.xticks(rotation=45)
+    plt.title("Three Local, One Contextual vs Baseline Mixing = 5 contacts/person/day")
+    plt.tight_layout()
+    #ax.set_ylim(-2, 3)
+    plt.axhline(y=0, c='gray', ls='dotted')
+    # plt.show()
+
 #
 #
 # local3v2_contact5_s = s3_diff - s_diff
