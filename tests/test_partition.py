@@ -182,8 +182,12 @@ def max_ref(max_cr, ref_params):
 
 
 @pytest.fixture
-def min_test(contact, min_cr, params_template, travel):
-    min_contact = update_contact_rate(contact, min_cr)
+def min_contact(contact, min_cr):
+    return update_contact_rate(contact, min_cr)
+
+
+@pytest.fixture
+def min_test(params_template, travel, min_contact):
     min_partition = partition_contacts(travel, min_contact, daily_timesteps=10)
     min_phi_matrix = contact_matrix(min_partition)
     test_min = deepcopy(params_template)
@@ -235,11 +239,28 @@ def ref3(params_template, travel3):
     return ref3_params
 
 
+@pytest.fixture
+def test3_min(min_contact, travel3, ref3, test3):
+    partition3_min = partition_contacts(travel3, min_contact, daily_timesteps=10)
+    phi_matrix3_min = contact_matrix(partition3_min)
+    test3_min_params = deepcopy(test3)
+    test3_min_params['phi'] = phi_matrix3_min
+    return test3_min_params
+
+
+@pytest.fixture
+def ref3_min(min_cr, ref3):
+    ref3_min_params = deepcopy(ref3)
+    ref3_min_params['phi'] = [[[[min_cr/10, 0], [0, 0]]]]
+    return ref3_min_params
+
+
 @pytest.fixture(params=[
     ('test1', 'ref_params'),
     ('max_test', 'max_ref'),
     ('min_test', 'ref_min'),
     ('test3', 'ref3'),
+    ('test3_min', 'ref3_min'),
 ])
 def comparison(request):
     """A workaround alternative to passing fixtures in pytest.mark.parametrize"""
@@ -425,45 +446,35 @@ def plt_test3_vs_ref3():
     plt.axhline(y=0, c='gray', ls='dotted')
     # plt.show()
 
-#
-#
-# local3v2_contact5_s = s3_diff - s_diff
-# local3v2_contact5_e = e3_diff - e_diff
-# local3v2_contact5_i = i3_diff - i_diff
-# local3v2_contact5_r = r3_diff - r_diff
-#
-#
-# # plot
-# fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-# local3v2_contact5_s.plot(ax=ax, color='b')
-# local3v2_contact5_e.plot(ax=ax, color='g')
-# local3v2_contact5_i.plot(ax=ax, color='r')
-# local3v2_contact5_r.plot(ax=ax, color='k')
-# plt.legend(("S", "E", "I", "R"), loc=0)
-# plt.ylabel("Population Size")
-# plt.xlabel("Time")
-# plt.xticks(rotation=45)
-# plt.title("Three Local, One Contextual vs Two Local, One Contextual")
-# plt.tight_layout()
-# # plt.show()
-#
-# ref3_model.plot_timeseries()
-# test3_model.plot_timeseries()
-#
-# # 5
-# partition3_min = partition_contacts(travel3, min_contact, daily_timesteps=10)
-# phi_matrix3_min = contact_matrix(partition3_min)
-# test3_min = deepcopy(test3)
-# test3_min['phi'] = phi_matrix3_min
-# ref3_min = deepcopy(ref3)
-# ref3_min['phi'] = [[[[min_cr/10, 0], [0, 0]]]]
-# test3_min_model = SEIR(test3_min)
-# test3_min_model.seir()
-# ref3_min_model = SEIR(ref3_min)
-# ref3_min_model.seir()
-#
+
+
+def plot_local_3v2():
+    local3v2_contact5_s = s3_diff - s_diff
+    local3v2_contact5_e = e3_diff - e_diff
+    local3v2_contact5_i = i3_diff - i_diff
+    local3v2_contact5_r = r3_diff - r_diff
+
+    # plot
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    local3v2_contact5_s.plot(ax=ax, color='b')
+    local3v2_contact5_e.plot(ax=ax, color='g')
+    local3v2_contact5_i.plot(ax=ax, color='r')
+    local3v2_contact5_r.plot(ax=ax, color='k')
+    plt.legend(("S", "E", "I", "R"), loc=0)
+    plt.ylabel("Population Size")
+    plt.xlabel("Time")
+    plt.xticks(rotation=45)
+    plt.title("Three Local, One Contextual vs Two Local, One Contextual")
+    plt.tight_layout()
+    # plt.show()
+
+    ref3_model.plot_timeseries()
+    test3_model.plot_timeseries()
+
+
+# test3_min vs ref3_min
 # s3_diff_min, e3_diff_min, i3_diff_min, r3_diff_min = test_partition(test3_min_model, ref3_min_model, atol=abs_tol, rtol=rel_tol)
-#
+
 #
 # # plot
 # fig, ax = plt.subplots(1, 1, figsize=(8, 5))
