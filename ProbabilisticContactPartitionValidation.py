@@ -4,6 +4,7 @@
 # In[1]:
 
 
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -170,44 +171,44 @@ def test_partition(test, ref, method=xarray.testing.assert_allclose, **kwargs):
 
     test_s = xr_summary(test.final.S, sel={'age': 'young'}, timeslice=slice(0, test.duration), sum_over='node')
     ref_s = xr_summary(ref.final.S, sel={'age': 'young'}, timeslice=slice(0, ref.duration), sum_over='node')
-    
+
     diff_s = test_s - ref_s
-    
+
     test_e = xr_summary(test.final.E, sel={'age': 'young'}, timeslice=slice(0, test.duration), sum_over='node')
     ref_e = xr_summary(ref.final.E, sel={'age': 'young'}, timeslice=slice(0, ref.duration), sum_over='node')
-    
+
     diff_e = test_e - ref_e
-    
+
     test_i = xr_summary(test.final.I, sel={'age': 'young'}, timeslice=slice(0, test.duration), sum_over='node')
     ref_i = xr_summary(ref.final.I, sel={'age': 'young'}, timeslice=slice(0, ref.duration), sum_over='node')
-    
+
     diff_i = test_i - ref_i
-    
+
     test_r = xr_summary(test.final.R, sel={'age': 'young'}, timeslice=slice(0, test.duration), sum_over='node')
     ref_r = xr_summary(ref.final.R, sel={'age': 'young'}, timeslice=slice(0, ref.duration), sum_over='node')
-    
+
     diff_r = test_r - ref_r
-    
+
     try:
         method(test_s, ref_s, **kwargs)
     except AssertionError:
         print('Differing values for susceptible timeseries.')
-        
+
     try:
         method(test_e, ref_e, **kwargs)
     except AssertionError:
         print('Differing values for exposed timeseries.')
-    
+
     try:
         method(test_i, ref_i, **kwargs)
     except AssertionError:
         print('Differing values for infected timeseries.')
-    
+
     try:
         method(test_r, ref_r, **kwargs)
     except AssertionError:
         print('Differing values for recovered timeseries.')
-        
+
     return diff_s, diff_e, diff_i, diff_r
 
 
@@ -251,13 +252,13 @@ test_partition(test1_model, ref_model, method=xarray.testing.assert_equal)
 
 
 def update_contact_rate(contact_df, new_rate, age1='young', age2='young'):
-    
+
     contact_idx = contact_df.set_index(['age1', 'age2'])
     contact_dict = contact_idx.to_dict()
     contact_dict['daily_per_capita_contacts'][(age1, age2)] = new_rate
     updated_df = pd.DataFrame.from_dict(contact_dict).reset_index()
     updated_df.columns = ['age1', 'age2', 'daily_per_capita_contacts']
-    
+
     return updated_df
 
 
@@ -436,13 +437,13 @@ pop_template = {
 
 
 def update_travel(travel_df, new_count, source, destination, age_src='young', age_dest='young'):
-    
+
     travel_idx = travel_df.set_index(['source', 'destination', 'age_src', 'age_dest'])
     travel_dict = travel_idx.to_dict()
     travel_dict['n'][(source, destination, age_src, age_dest)] = new_count
     updated_df = pd.DataFrame.from_dict(travel_dict).reset_index()
     updated_df.columns = ['source', 'destination', 'age_src', 'age_dest', 'destination_type', 'n']
-    
+
     return updated_df
 
 
@@ -450,9 +451,9 @@ def update_travel(travel_df, new_count, source, destination, age_src='young', ag
 
 
 def update_start_pop(travel_df):
-    
+
     grouped = travel_df.groupby(['source', 'age_src'])['n'].sum().reset_index()
-    
+
     nodes = sorted(travel_df['source'].unique())
     ages = sorted(travel_df['age_src'].unique(), reverse=True)
 
@@ -460,7 +461,7 @@ def update_start_pop(travel_df):
     pop_arr_e = np.zeros([len(nodes), len(ages)])
     pop_arr_i = np.zeros([len(nodes), len(ages)])
     pop_arr_r = np.zeros([len(nodes), len(ages)])
-    
+
     for i, node in enumerate(nodes):
         for j, age in enumerate(ages):
             new_total = grouped[(grouped['source']==node) & (grouped['age_src']==age)]['n'].item()
@@ -732,6 +733,9 @@ plt.axhline(y=0, c='gray', ls='dotted')
 
 plt.show()
 
+# DEBUG
+# TODO
+sys.exit(0)
 
 # # 16 Nodes
 
@@ -808,7 +812,3 @@ plt.show()
 
 
 # In[ ]:
-
-
-
-
