@@ -1,0 +1,18 @@
+{
+  "mu": 0.0,
+  "sigma": 0.5,
+  "beta": 0.035,
+  "gamma": 0.2,
+  "omega": 0.1,
+  "start_S": [[9, 4, 75, 0]],
+  "start_E": [[0, 0, 0, 0]],
+  "start_I": [[1, 1, 0, 0]],
+  "start_R": [[0, 0, 0, 0]],
+  "days": 30,
+  "outpath": "../outputs/single_node",
+  "phi": [[[[0.3, 0], [0, 0]]]],
+  "n_sims": 1,
+  "stochastic": "False",
+  "n_age": 2,
+  "n_nodes": 4
+}

@@ -56,16 +56,32 @@ def load_population(path):
 def contact_probability(n_i, n_j, n_i_total, n_k_total):
 
     # contacts between members of source node within the destination node
-    fraction_i_to_j = n_i/n_i_total
-    fraction_j_in_k = n_j/n_k_total
+    try:
+        fraction_i_to_j = n_i/n_i_total
+    except ZeroDivisionError:
+        fraction_i_to_j = 0
+
+    try:
+        fraction_j_in_k = n_j/n_k_total
+    except ZeroDivisionError:
+        fraction_j_in_k = 0
+
     pr_ii_in_j = fraction_i_to_j * fraction_j_in_k
 
     return pr_ii_in_j
 
-def probabilistic_partition(travel_df, daily_timesteps):
 
-    total_pop = travel_df.groupby(['source'])['n'].sum().to_dict()
-    total_contextual_dest = travel_df[travel_df['destination_type'] == 'contextual'].groupby(['destination'])['n'].sum().to_dict()
+def probabilistic_partition(travel_df):
+
+    # total populations by source and age
+    total_pop = travel_df.groupby(['source', 'age'])['n'].sum().to_dict()
+    total_contextual_dest = travel_df[travel_df['destination_type'] == 'contextual'].groupby(['destination', 'age'])['n'].sum().to_dict()
+
+    # resident populations (population less those who travel out)
+    residents = travel_df[travel_df['source'] == travel_df['destination']]
+    residents = residents.groupby(['source', 'destination', 'age'])['n'].sum().to_dict()
+
+    age_groups = travel_df['age'].unique()
 
     if len(set(total_pop.keys()).intersection(set(total_contextual_dest.keys()))) > 0:
         raise ValueError('Contextual nodes cannot also be source nodes.')
@@ -90,32 +106,52 @@ def probabilistic_partition(travel_df, daily_timesteps):
     # if it's local contact, or contact in contextual location within local pop only, it's straightforward
     for i, row in travel_df.iterrows():
         if row['destination_type'] == 'local':
-            contact_dict['i'].append(row['source'])
-            contact_dict['j'].append(row['destination'])
-            contact_dict['age_i'].append(row['age_src'])
-            contact_dict['age_j'].append(row['age_dest'])
-            # if it's local within-node contact, the pr(contact) = n stay in node / n total in node (no need to multiply by another fraction)
-            if row['source'] == row['destination']:
-                daily_pr = contact_probability(n_i=row['n'], n_j=1, n_i_total=total_pop[row['source']], n_k_total=1)
-                contact_dict['pr_contact_ij'].append(daily_pr)
-            else:
-                daily_pr = contact_probability(n_i=row['n'], n_j=row['n'], n_i_total=total_pop[row['source']], n_k_total=total_pop[row['destination']])
-                contact_dict['pr_contact_ij'].append(daily_pr)
+            for destination_age in age_groups:
+
+                contact_dict['i'].append(row['source'])
+                contact_dict['j'].append(row['destination'])
+                contact_dict['age_i'].append(row['age'])
+                contact_dict['age_j'].append(destination_age)
+
+                # if it's local within-node contact between individuals of same age group, the pr(contact) = n stay in node / n total in node (no need to multiply by another fraction)
+                if (row['source'] == row['destination']) and (destination_age == row['age']):
+                    daily_pr = contact_probability(
+                        n_i=row['n'],                                        # people who do not leave source locality
+                        n_j=1,                                               # set to 1 to ignore destination population (destination = source)
+                        n_i_total=total_pop[(row['source'], row['age'])],    # total population of source locality
+                        n_k_total=1                                          # set to 1 to ignore destination population (destination = source)
+                    )
+                    contact_dict['pr_contact_ij'].append(daily_pr)
+                else:
+                    daily_pr = contact_probability(
+                        n_i=row['n'],                                                          # migratory population from source locality
+                        n_j=residents[(row['destination'], row['destination'], destination_age)],   # residential (daily) population of destination locality
+                        n_i_total=total_pop[(row['source'], row['age'])],                      # total population of source locality
+                        n_k_total=total_pop[(row['destination'], destination_age)]                  # total population of destination locality
+                    )
+                    contact_dict['pr_contact_ij'].append(daily_pr)
 
         # partitioning contacts between two different nodes within a contextual node requires a bit more parsing
         elif row['destination_type'] == 'contextual':
             other_sources = implicit2source[row['destination']]['source']
             for j in other_sources:
-                contact_dict['i'].append(row['source'])
-                contact_dict['j'].append(j)
-                contact_dict['age_i'].append(row['age_src'])
-                contact_dict['age_j'].append(row['age_dest'])
-                j_to_dest = travel_df[(travel_df['source'] == j) \
-                                      & (travel_df['destination'] == row['destination']) \
-                                      & (travel_df['age_src'] == row['age_src']) \
-                                      & (travel_df['age_dest'] == row['age_dest'])]['n'].item()
-                daily_pr = contact_probability(n_i=row['n'], n_j=j_to_dest, n_i_total=total_pop[row['source']], n_k_total=total_pop[row['destination']])
-                contact_dict['pr_contact_ij'].append(daily_pr)
+                for destination_age in age_groups:
+                    contact_dict['i'].append(row['source'])
+                    contact_dict['j'].append(j)
+                    contact_dict['age_i'].append(row['age'])
+                    contact_dict['age_j'].append(destination_age)
+
+                    # how many in each age group went from other locations j to the shared contextual destination?
+                    j_to_dest = travel_df[(travel_df['source'] == j) \
+                        & (travel_df['destination'] == row['destination']) \
+                        & (travel_df['age'] == destination_age)]['n'].item()
+                    daily_pr = contact_probability(
+                        n_i=row['n'],                                      # migratory population from source locality
+                        n_j=j_to_dest,                                     # migrants from other locality j that share same contextual destination
+                        n_i_total=total_pop[(row['source'], row['age'])],  # total population of source locality
+                        n_k_total=total_pop[(row['destination'], destination_age)]     # total population of contextual destination
+                    )
+                    contact_dict['pr_contact_ij'].append(daily_pr)
 
     contact_df = pd.DataFrame.from_dict(contact_dict)
     contact_df = contact_df.groupby(['i', 'j', 'age_i', 'age_j'])['pr_contact_ij'].sum().reset_index()

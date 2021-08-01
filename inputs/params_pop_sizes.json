@@ -9,5 +9,9 @@
   "start_I": 3,
   "start_R": 0,
   "days": 50,
-  "outdir": "../outputs"
+  "outdir": "../outputs",
+  "phi": [[1, 1], [1, 1]],
+  "n_sims": 1,
+  "stochastic": "False",
+  "n_age": 2
 }

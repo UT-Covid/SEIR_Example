@@ -1,0 +1,9 @@
+node,node_type,age,population
+A,explicit,young,10
+A,explicit,old,0
+B,explicit,young,5
+B,explicit,old,0
+S1_A,implicit,young,25
+S1_A,implicit,old,0
+S1_B,implicit,young,50
+S1_B,implicit,old,0

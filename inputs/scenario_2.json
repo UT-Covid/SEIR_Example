@@ -1,0 +1,14 @@
+{
+  "mu": 0.0,
+  "sigma": 0.8,
+  "beta": 0.1,
+  "gamma": 0.2,
+  "omega": 0.1,
+  "start_S": 10000,
+  "start_E": 7,
+  "start_I": 3,
+  "start_R": 0,
+  "days": 90,
+  "n_sims": 10,
+  "outdir": "../outputs/scenario_2"
+}
